@@ -1,0 +1,179 @@
+#!/bin/bash
+#
+# Hal Stack Proactive - Unified CLI
+# One command to access all Hal Stack features
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+show_help() {
+    cat <<EOF
+Hal Stack Proactive — Unified CLI
+
+Usage: hal-stack <command> [options]
+
+Commands:
+  doctor              Verify installation and check everything is OK
+  organize-memory      Run memory tiering organization (HOT/WARM/COLD)
+  budget-check        Check current token budget usage
+  context-recommend   Recommend context files for a prompt
+  route-model         Route task to appropriate model
+  instincts           ECC continuous learning commands
+    list              List all learned instincts
+    learn             Learn a new instinct pattern
+    high-confidence   Show high-confidence instincts
+  promote-learning    Promote learnings from .learnings/ to system files
+  ontology            Ontology graph operations (create/query/relate/validate)
+  heartbeat-check     Check if a heartbeat type should run now
+
+Options:
+  -h, --help          Show this help
+
+Examples:
+  hal-stack doctor
+  hal-stack organize-memory
+  hal-stack budget-check
+  hal-stack instincts list
+EOF
+}
+
+# Main dispatcher
+case "${1:-}" in
+    "")
+        show_help
+        exit 0
+        ;;
+    "-h"|"--help")
+        show_help
+        exit 0
+        ;;
+    "doctor")
+        echo "=== Hal Stack Proactive — Doctor Check ===\n"
+        echo "Checking directories..."
+        
+        ok=1
+        for dir in \
+            ~/.openclaw/workspace/memory \
+            ~/.openclaw/workspace/memory/hot \
+            ~/.openclaw/workspace/memory/warm \
+            ~/.openclaw/workspace/memory/ontology \
+            ~/.openclaw/workspace/.learnings \
+            ~/.openclaw/workspace/instincts \
+            ~/.openclaw/workspace/instincts/personal \
+            ~/.openclaw/workspace/instincts/project
+        do
+            if [ -d "$dir" ]; then
+                echo "✓ $dir — OK"
+            else
+                echo "✗ $dir — Missing, creating..."
+                mkdir -p "$dir"
+                ok=0
+            fi
+        done
+        
+        echo -e "\nChecking scripts..."
+        scripts=(
+            context-optimizer.py
+            model-router.py
+            heartbeat-optimizer.py
+            token-tracker.py
+            memory-tiering.py
+            ontology.py
+            promote-learning.py
+            ecc-observe.py
+        )
+        
+        for script in "${scripts[@]}"; do
+            if [ -f "$SCRIPT_DIR/$script" ]; then
+                echo "✓ $script — OK"
+            else
+                echo "✗ $script — Missing"
+                ok=0
+            fi
+        done
+        
+        echo -e "\nChecking template files..."
+        templates=(
+            AGENTS.md
+            HEARTBEAT.md
+            SOUL.md
+            USER.md
+            MEMORY.md
+            TOOLS.md
+        )
+        
+        for tmpl in "${templates[@]}"; do
+            if [ -f ~/.openclaw/workspace/$tmpl ]; then
+                echo "✓ ~/.openclaw/workspace/$tmpl — exists"
+            else
+                echo "○ ~/.openclaw/workspace/$tmpl — not created yet (will be created on first use)"
+            fi
+        done
+        
+        echo -e "\n=== Summary ==="
+        if [ $ok -eq 1 ]; then
+            echo "✅ Everything looks good!"
+        else
+            echo "⚠️  Some issues found and fixed above."
+        fi
+        exit 0
+        ;;
+    "organize-memory")
+        python3 "$SCRIPT_DIR/memory-tiering.py" organize
+        exit 0
+        ;;
+    "budget-check")
+        python3 "$SCRIPT_DIR/token-tracker.py" check
+        exit 0
+        ;;
+    "context-recommend")
+        if [ -z "${2:-}" ]; then
+            echo "Usage: hal-stack context-recommend '<prompt>'"
+            exit 1
+        fi
+        python3 "$SCRIPT_DIR/context-optimizer.py" recommend "$2"
+        exit 0
+        ;;
+    "route-model")
+        shift
+        python3 "$SCRIPT_DIR/model-router.py" "$@"
+        exit 0
+        ;;
+    "instincts")
+        shift
+        python3 "$SCRIPT_DIR/ecc-observe.py" "$@"
+        exit 0
+        ;;
+    "learn-instinct")
+        # Deprecated: use instincts learn
+        shift
+        python3 "$SCRIPT_DIR/ecc-observe.py" learn "$@"
+        exit 0
+        ;;
+    "promote-learning")
+        shift
+        python3 "$SCRIPT_DIR/promote-learning.py" "$@"
+        exit 0
+        ;;
+    "ontology")
+        shift
+        python3 "$SCRIPT_DIR/ontology.py" "$@"
+        exit 0
+        ;;
+    "heartbeat-check")
+        if [ -z "${2:-}" ]; then
+            echo "Usage: hal-stack heartbeat-check <type>"
+            exit 1
+        fi
+        python3 "$SCRIPT_DIR/heartbeat-optimizer.py" check "$2"
+        exit 0
+        ;;
+    *)
+        echo "Unknown command: $1"
+        echo
+        show_help
+        exit 1
+        ;;
+esac
